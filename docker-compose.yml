@@ -8,6 +8,20 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: students_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
   backend:
     build:
       context: ./backend
@@ -42,5 +56,9 @@ services:
       - COLLECTOR_OTLP_HTTP_ALLOWED_ORIGINS=http://localhost:5173
       - COLLECTOR_OTLP_HTTP_ALLOWED_HEADERS=content-type,x-requested-with
     restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
 
 

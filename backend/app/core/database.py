@@ -7,12 +7,15 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
-    pool_size=10,
-    max_overflow=20,
-    pool_timeout=30,
-    pool_pre_ping=False,   # disabled — rely on pool_recycle for speed
-    pool_recycle=1800,     # recycle connections every 30 min
-    connect_args={"ssl": "require"},  # required for Supabase
+    pool_size=10,              # Increased for concurrency
+    max_overflow=20,           # Allow more temporary overflow
+    pool_timeout=30,           # Wait up to 30s for a connection
+    pool_pre_ping=False,       # Disabled pre-ping for speed (rely on pool_recycle)
+    pool_recycle=1800,         # Recycle every 30 min instead of 5
+    connect_args={
+        "ssl": "require",
+        "command_timeout": 60, # Statements time out after 60s
+    },
 )
 
 AsyncSessionLocal = async_sessionmaker(

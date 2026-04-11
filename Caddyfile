@@ -1,0 +1,3 @@
+students.tracestack.online {
+    reverse_proxy backend:8000
+}
