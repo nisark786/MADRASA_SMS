@@ -22,7 +22,7 @@ jobs:
             cd /var/www/students_data_store
             
             # 2. Create .env file from secret
-            echo "${{ secrets.DOTENV_CONTENT }}" > backend/.env
+            echo "${{ secrets.DOTENV_CONTENT }}" > .env
             
             # 3. Pull latest code
             git pull origin main
