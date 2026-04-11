@@ -28,11 +28,11 @@ jobs:
             git pull origin main
             
             # 3. Pull newest containers and build
-            docker-compose -f docker-compose.yml pull
-            docker-compose -f docker-compose.yml build
+            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.yml build
             
             # 4. Restart deployment with zero downtime (creates new containers before stopping old ones)
-            docker-compose -f docker-compose.yml up -d --remove-orphans
+            docker compose -f docker-compose.yml up -d --remove-orphans
             
             # 5. Run Database Migrations safely
             docker exec students_backend alembic upgrade head
