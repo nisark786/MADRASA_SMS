@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+dist/
+build/
+backend/__pycache__/
+backend/.pytest_cache/
+*.pyc
+
+# Docker
+docker-compose.override.yml
