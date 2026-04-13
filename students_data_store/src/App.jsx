@@ -21,6 +21,7 @@ const StudentsPage = lazy(() => import('./pages/StudentsPage'));
 const StudentReport = lazy(() => import('./pages/StudentReport'));
 const EmailHistoryPage = lazy(() => import('./pages/EmailHistoryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const TwoFactorSetupPage = lazy(() => import('./pages/TwoFactorSetupPage'));
 
 // Lightweight spinner shown while a lazy page chunk is loading
 function PageLoader() {
@@ -123,6 +124,16 @@ export default function App() {
                 <ProtectedRoute>
                   <RouteErrorBoundary routeName="Profile">
                     <ProfilePage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/auth/2fa-setup"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="2FA Setup">
+                    <TwoFactorSetupPage />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

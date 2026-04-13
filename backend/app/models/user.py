@@ -38,3 +38,9 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    two_factor_auth: Mapped["TwoFactorAuth"] = relationship(
+        "TwoFactorAuth",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )

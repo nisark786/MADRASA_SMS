@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { API_BASE_URL } from '../api/config';
 import Sidebar from '../components/layout/Sidebar';
-import { User, Mail, Edit2, Lock, Eye, EyeOff, CheckCircle, AlertCircle, Save, X } from 'lucide-react';
+import { User, Mail, Edit2, Lock, Eye, EyeOff, CheckCircle, AlertCircle, Save, X, Shield } from 'lucide-react';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -40,9 +40,14 @@ export default function ProfilePage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
 
+  // 2FA state
+  const [twoFAStatus, setTwoFAStatus] = useState(null);
+  const [loadingTwoFA, setLoadingTwoFA] = useState(true);
+
   // Load profile on mount
   useEffect(() => {
     fetchProfile();
+    fetch2FAStatus();
   }, []);
 
   const fetchProfile = async () => {
@@ -73,6 +78,29 @@ export default function ProfilePage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetch2FAStatus = async () => {
+    try {
+      setLoadingTwoFA(true);
+      const token = localStorage.getItem('access_token');
+
+      const response = await fetch(`${API_BASE_URL}/auth/2fa/status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTwoFAStatus(data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching 2FA status:', err);
+    } finally {
+      setLoadingTwoFA(false);
     }
   };
 
@@ -551,6 +579,111 @@ export default function ProfilePage() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Two-Factor Authentication Section */}
+          <div className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-purple-100 p-2 rounded-lg">
+                <Shield className="w-6 h-6 text-purple-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Two-Factor Authentication</h2>
+            </div>
+
+            {loadingTwoFA ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-8 h-8 border-4 border-purple-100 border-t-purple-600 rounded-full animate-spin" />
+              </div>
+            ) : twoFAStatus ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Status:</p>
+                    <p className="text-sm text-gray-600">
+                      {twoFAStatus.enabled ? (
+                        <span className="flex items-center gap-2 text-green-600">
+                          <CheckCircle className="w-4 h-4" /> Active
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2 text-orange-600">
+                          <AlertCircle className="w-4 h-4" /> Inactive
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Backup Codes:</p>
+                    <p className="text-sm text-gray-600">{twoFAStatus.backup_codes_remaining || 0} remaining</p>
+                  </div>
+                </div>
+
+                {twoFAStatus.last_verified_at && (
+                  <p className="text-xs text-gray-600">
+                    Last verified: {new Date(twoFAStatus.last_verified_at).toLocaleDateString()} at{' '}
+                    {new Date(twoFAStatus.last_verified_at).toLocaleTimeString()}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  {!twoFAStatus.enabled ? (
+                    <a
+                      href="/auth/2fa-setup"
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors"
+                    >
+                      Enable 2FA
+                    </a>
+                  ) : (
+                    <>
+                      <a
+                        href="/auth/2fa-setup"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                      >
+                        Update 2FA
+                      </a>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to disable 2FA?')) {
+                            const password = prompt('Enter your password to confirm:');
+                            if (password) {
+                              try {
+                                const token = localStorage.getItem('access_token');
+                                const response = await fetch(`${API_BASE_URL}/auth/2fa/disable`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({ password }),
+                                });
+
+                                if (response.ok) {
+                                  alert('2FA has been disabled');
+                                  fetch2FAStatus();
+                                } else {
+                                  const data = await response.json();
+                                  alert(data.detail || 'Failed to disable 2FA');
+                                }
+                              } catch (err) {
+                                alert('Error disabling 2FA');
+                              }
+                            }
+                          }
+                        }}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                      >
+                        Disable 2FA
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <p className="text-xs text-gray-600">
+                  {twoFAStatus.enabled
+                    ? 'Two-Factor Authentication is active. You will need to enter a code from your authenticator app when logging in.'
+                    : 'Enable Two-Factor Authentication to add an extra layer of security to your account.'}
+                </p>
+              </div>
+            ) : null}
           </div>
         </div>
       </main>
