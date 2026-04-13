@@ -10,6 +10,7 @@ from app.models.email import Email, EmailTemplate, EmailStatus
 from app.models.password_reset import PasswordResetToken
 from app.models.email_verification import EmailVerificationToken
 from app.models.two_factor_auth import TwoFactorAuth, TwoFactorAuditLog
+from app.models.database_backup import DatabaseBackup, BackupRestore, BackupSchedule
 
 __all__ = [
     "User",
@@ -31,4 +32,7 @@ __all__ = [
     "EmailVerificationToken",
     "TwoFactorAuth",
     "TwoFactorAuditLog",
+    "DatabaseBackup",
+    "BackupRestore",
+    "BackupSchedule",
 ]

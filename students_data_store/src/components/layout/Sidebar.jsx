@@ -9,7 +9,8 @@ import {
   LogOut,
   Mail,
   User as UserIcon,
-  FileText
+  FileText,
+  HardDrive
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -19,6 +20,8 @@ const NAV_ITEMS = [
   { to: '/admin/roles',         label: 'Roles',        icon: ShieldCheck, permission: 'admin:manage_roles' },
   { to: '/admin/audit-logs',    label: 'Audit Logs',   icon: FileText, permission: 'admin:view_audit' },
   { to: '/admin/emails',        label: 'Email History',icon: Mail, permission: 'admin:manage_users' },
+  { to: '/admin/backups',       label: 'Backups',      icon: HardDrive, permission: 'admin:manage_users' },
+  { to: '/admin/backup-schedules', label: 'Schedules', icon: ListTodo, permission: 'admin:manage_users' },
   { to: '/profile',             label: 'My Profile',   icon: UserIcon, permission: null },
 ];
 

@@ -23,6 +23,8 @@ const EmailHistoryPage = lazy(() => import('./pages/EmailHistoryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const TwoFactorSetupPage = lazy(() => import('./pages/TwoFactorSetupPage'));
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
+const BackupManagementPage = lazy(() => import('./pages/BackupManagementPage'));
+const BackupSchedulePage = lazy(() => import('./pages/BackupSchedulePage'));
 
 // Lightweight spinner shown while a lazy page chunk is loading
 function PageLoader() {
@@ -145,6 +147,26 @@ export default function App() {
                 <ProtectedRoute permission="admin:view_audit">
                   <RouteErrorBoundary routeName="Audit Logs">
                     <AuditLogsPage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/backups"
+              element={
+                <ProtectedRoute permission="admin:manage_users">
+                  <RouteErrorBoundary routeName="Backup Management">
+                    <BackupManagementPage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/backup-schedules"
+              element={
+                <ProtectedRoute permission="admin:manage_users">
+                  <RouteErrorBoundary routeName="Backup Schedules">
+                    <BackupSchedulePage />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }
