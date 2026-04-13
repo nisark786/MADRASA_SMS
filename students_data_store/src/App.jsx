@@ -18,6 +18,7 @@ const RolesPage   = lazy(() => import('./pages/RolesPage'));
 const StudentsPage = lazy(() => import('./pages/StudentsPage'));
 const StudentReport = lazy(() => import('./pages/StudentReport'));
 const EmailHistoryPage = lazy(() => import('./pages/EmailHistoryPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 
 // Lightweight spinner shown while a lazy page chunk is loading
 function PageLoader() {
@@ -108,6 +109,16 @@ export default function App() {
                 <ProtectedRoute permission="admin:manage_users">
                   <RouteErrorBoundary routeName="Email History">
                     <EmailHistoryPage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="Profile">
+                    <ProfilePage />
                   </RouteErrorBoundary>
                 </ProtectedRoute>
               }

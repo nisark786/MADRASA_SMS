@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { to: '/admin/roles',         label: 'Roles',        icon: ShieldCheck, permission: 'admin:manage_roles' },
   { to: '/admin/audit',         label: 'Audit Logs',   icon: ListTodo, permission: 'admin:view_audit' },
   { to: '/admin/emails',        label: 'Email History',icon: Mail, permission: 'admin:manage_users' },
+  { to: '/profile',             label: 'My Profile',   icon: UserIcon, permission: null },
 ];
 
 export default function Sidebar() {
