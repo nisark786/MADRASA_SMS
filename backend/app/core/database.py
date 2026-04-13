@@ -3,28 +3,24 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
+from sqlalchemy import pool
+import asyncpg
+
+async def async_creator():
+    """Manual creator to ensure statement_cache_size is set early for pgBouncer."""
+    return await asyncpg.connect(
+        settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1),
+        statement_cache_size=0,
+        max_cached_statement_lifetime=0,
+        ssl="require"
+    )
+
 engine = create_async_engine(
     settings.DATABASE_URL,
+    async_creator=async_creator,
     echo=False,
     future=True,
-    # Connection pool configuration
-    pool_size=settings.DB_POOL_SIZE,                    # Connections to keep in pool
-    max_overflow=settings.DB_MAX_OVERFLOW,              # Additional peak connections
-    pool_timeout=settings.DB_POOL_TIMEOUT,              # Fail fast on timeout
-    pool_pre_ping=True,                                  # Health check before use
-    pool_recycle=settings.DB_POOL_RECYCLE,              # Recycle stale connections
-    pool_reset_on_return="rollback",                    # Clean state after use
-    # Query optimization
-    connect_args={
-        "ssl": "require",
-        "command_timeout": 30,
-        "statement_cache_size": 0,                      # Disable statement caching (prepared statements)
-        "prepared_statement_cache_size": 0,
-        "server_settings": {
-            "application_name": "students_backend",
-            "jit": "off",                               # Disable JIT for consistency
-        }
-    },
+    poolclass=pool.NullPool,    # Disable internal pooling for pgBouncer efficiency
 )
 
 AsyncSessionLocal = async_sessionmaker(

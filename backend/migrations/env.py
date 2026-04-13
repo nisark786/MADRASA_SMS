@@ -72,16 +72,22 @@ async def run_async_migrations() -> None:
 
     """
 
-    connect_args = {
-        "statement_cache_size": 0, # Required for Supabase/pgBouncer
-        "prepared_statement_cache_size": 0,
-    }
+    import asyncpg
+    from sqlalchemy import pool
+
+    async def async_creator():
+        return await asyncpg.connect(
+            settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1),
+            statement_cache_size=0,
+            max_cached_statement_lifetime=0,
+            ssl="require"
+        )
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args=connect_args,
+        async_creator=async_creator,
     )
 
     async with connectable.connect() as connection:
