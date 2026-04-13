@@ -51,6 +51,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         # Raises error if required env vars are missing
         case_sensitive = True
+        # Allow extra fields from .env that aren't defined in Settings
+        extra = "ignore"
 
 
 settings = Settings()

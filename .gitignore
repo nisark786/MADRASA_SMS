@@ -29,3 +29,9 @@ docker-compose.override.yml
 *.tfvars
 .terraform.lock.hcl
 
+# Google Cloud / Credentials
+backend/google-credentials.json
+*.json
+!package.json
+!tsconfig.json
+!composer.json
