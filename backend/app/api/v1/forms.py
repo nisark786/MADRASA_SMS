@@ -9,6 +9,7 @@ import re
 from app.core.database import get_db
 from app.core import redis_client as rc
 from app.core.audit import log_audit_task
+from app.core.email_service import EmailService
 from app.models.form import FormLink, FormSubmission
 from app.models.student import Student
 from app.dependencies.auth import require_permission, get_current_user
@@ -16,6 +17,60 @@ from app.dependencies.auth import require_permission, get_current_user
 router = APIRouter(prefix="/forms", tags=["Forms & Submissions"])
 
 _FORMS_LIST_KEY = "cache:forms:links"
+
+
+async def send_form_approved_email(student_data: dict, db: AsyncSession):
+    """Send approval email to student."""
+    try:
+        email = student_data.get("email")
+        if not email:
+            return
+        
+        student_name = f"{student_data.get('first_name', '')} {student_data.get('last_name', '')}".strip()
+        
+        email_service = EmailService()
+        await email_service.send_email(
+            recipient_email=email,
+            recipient_name=student_name or "Student",
+            template_name="form_approved",
+            context={
+                "student_name": student_name or "Student",
+            },
+            db=db,
+        )
+    except Exception as e:
+        # Log but don't fail form approval if email fails
+        from app.core.structured_logging import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Failed to send approval email: {str(e)}")
+
+
+async def send_form_rejected_email(student_data: dict, rejection_reason: str, db: AsyncSession):
+    """Send rejection email to student."""
+    try:
+        email = student_data.get("email")
+        if not email:
+            return
+        
+        student_name = f"{student_data.get('first_name', '')} {student_data.get('last_name', '')}".strip()
+        
+        email_service = EmailService()
+        await email_service.send_email(
+            recipient_email=email,
+            recipient_name=student_name or "Student",
+            template_name="form_rejected",
+            context={
+                "student_name": student_name or "Student",
+                "rejection_reason": rejection_reason or "Please review and resubmit your information.",
+            },
+            db=db,
+        )
+    except Exception as e:
+        # Log but don't fail form rejection if email fails
+        from app.core.structured_logging import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Failed to send rejection email: {str(e)}")
+
 
 class FormFieldDef(BaseModel):
     name: str # e.g. "first_name"
@@ -32,6 +87,10 @@ class ToggleFormStatusRequest(BaseModel):
 
 class ApproveSubmissionRequest(BaseModel):
     force_update: bool = False
+
+
+class RejectSubmissionRequest(BaseModel):
+    reason: Optional[str] = None  # Optional rejection reason to send to student
 
 
 # ── Form Submission Validation ────────────────────────────────────────────────
@@ -297,16 +356,18 @@ async def approve_submission(
     
     background_tasks.add_task(rc.invalidate_keys, "cache:students:list")
     background_tasks.add_task(log_audit_task, current_user.id, "APPROVE_SUBMISSION", "forms", sub_id)
+    background_tasks.add_task(send_form_approved_email, s_data, db)
     return {"message": "Student approved successfully!"}
 
 @router.post("/submissions/{sub_id}/reject")
 async def reject_submission(
     sub_id: str,
+    body: RejectSubmissionRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_permission("students:write"))
 ):
-    """Mark a submission as rejected."""
+    """Mark a submission as rejected and send rejection email."""
     result = await db.execute(select(FormSubmission).where(FormSubmission.id == sub_id))
     sub = result.scalar_one_or_none()
     
@@ -316,6 +377,7 @@ async def reject_submission(
     sub.status = "rejected"
     await db.commit()
     background_tasks.add_task(log_audit_task, current_user.id, "REJECT_SUBMISSION", "forms", sub_id)
+    background_tasks.add_task(send_form_rejected_email, sub.submitted_data, body.reason or "", db)
     return {"message": "Submission rejected"}
 
 # ── PUBLIC: FORMS ─────────────────────────────────────────────────────────────

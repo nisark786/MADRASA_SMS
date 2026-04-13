@@ -6,6 +6,7 @@ Only creates the bare minimum to get started:
   ✅ One system role: "admin" (cannot be deleted)
   ✅ One admin user from environment variables
   ✅ All dashboard widgets linked to permissions
+  ✅ Email templates for notifications
 
 Everything else (new roles, new users, role assignments)
 is created DYNAMICALLY by the admin through the API.
@@ -18,6 +19,7 @@ from app.models.user import User
 from app.models.role import Role, UserRole
 from app.models.permission import Permission, RolePermission
 from app.models.widget import Widget, WidgetPermission
+from app.models.email import EmailTemplate
 from app.core.security import hash_password
 
 # ── System permissions — these define WHAT actions exist in the system ────────
@@ -90,6 +92,62 @@ SYSTEM_WIDGETS = [
         "component_key":      "AuditLogWidget",
         "widget_type":        "table",
         "required_permission": "admin:view_audit",
+    },
+]
+
+# ── Email Templates — predefined notification templates ──────────────────────────
+SYSTEM_EMAIL_TEMPLATES = [
+    {
+        "name": "welcome",
+        "subject": "Welcome to {{ app_name }}",
+        "body_html": """<h2>Welcome {{ first_name }}!</h2>
+<p>Your account has been created successfully.</p>
+<p>Username: {{ username }}</p>
+<p>You can now log in to the application.</p>""",
+        "description": "Welcome email sent to new users",
+        "variables": ["app_name", "first_name", "username"],
+    },
+    {
+        "name": "password_reset",
+        "subject": "Reset Your Password",
+        "body_html": """<h2>Password Reset Request</h2>
+<p>Click the link below to reset your password:</p>
+<p><a href="{{ reset_link }}">Reset Password</a></p>
+<p>This link expires in {{ expiry_hours }} hours.</p>
+<p>If you didn't request this, ignore this email.</p>""",
+        "description": "Password reset link sent to users",
+        "variables": ["reset_link", "expiry_hours"],
+    },
+    {
+        "name": "form_approved",
+        "subject": "Your Submission Has Been Approved",
+        "body_html": """<h2>Submission Approved</h2>
+<p>Hi {{ student_name }},</p>
+<p>Your student information submission has been approved.</p>
+<p>Thank you for submitting your details.</p>""",
+        "description": "Email sent when a form submission is approved",
+        "variables": ["student_name"],
+    },
+    {
+        "name": "form_rejected",
+        "subject": "Your Submission Requires Changes",
+        "body_html": """<h2>Submission Requires Changes</h2>
+<p>Hi {{ student_name }},</p>
+<p>Your submission has been reviewed. Please make the following corrections:</p>
+<p>{{ rejection_reason }}</p>
+<p>Please resubmit your form.</p>""",
+        "description": "Email sent when a form submission is rejected",
+        "variables": ["student_name", "rejection_reason"],
+    },
+    {
+        "name": "email_verification",
+        "subject": "Verify Your Email Address",
+        "body_html": """<h2>Email Verification</h2>
+<p>Please verify your email address by clicking the link below:</p>
+<p><a href="{{ verification_link }}">Verify Email</a></p>
+<p>This link expires in {{ expiry_hours }} hours.</p>""",
+        "description": "Email verification link sent to users",
+        "variables": ["verification_link", "expiry_hours"],
     },
 ]
 
@@ -175,6 +233,22 @@ async def seed_database(db: AsyncSession):
             if perm:
                 db.add(WidgetPermission(widget_id=widget.id, permission_id=perm.id))
             print(f"  ✅ Widget created: {wdata['display_name']}")
+
+    # ── 5. Seed email templates ────────────────────────────────────────────────────
+    for tdata in SYSTEM_EMAIL_TEMPLATES:
+        result = await db.execute(select(EmailTemplate).where(EmailTemplate.name == tdata["name"]))
+        template = result.scalar_one_or_none()
+        if not template:
+            template = EmailTemplate(
+                name=tdata["name"],
+                subject=tdata["subject"],
+                body_html=tdata["body_html"],
+                description=tdata["description"],
+                variables=tdata["variables"],
+                is_active=True,
+            )
+            db.add(template)
+            print(f"  ✅ Email template created: {tdata['name']}")
 
     await db.commit()
     print("✅ Seed complete — admin can now create roles & users dynamically")

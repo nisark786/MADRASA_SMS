@@ -18,7 +18,7 @@ from app.core.error_handler import (
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.structured_logging import StructuredLoggingMiddleware
 
-from app.api.v1 import auth, users, roles, permissions, widgets, students, forms
+from app.api.v1 import auth, users, roles, permissions, widgets, students, forms, emails
 
 # Setup structured logging
 setup_logging()
@@ -123,6 +123,7 @@ app.include_router(permissions.router, prefix="/api/v1")
 app.include_router(students.router,    prefix="/api/v1")
 app.include_router(widgets.router,     prefix="/api/v1")
 app.include_router(forms.router,       prefix="/api/v1")
+app.include_router(emails.router,      prefix="/api/v1")
 
 
 @app.get("/")

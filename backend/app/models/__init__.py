@@ -6,6 +6,7 @@ from app.models.widget import Widget, WidgetPermission, UserWidgetPreference
 from app.models.audit_log import AuditLog
 from app.models.form import FormLink, FormSubmission
 from app.models.student import Student
+from app.models.email import Email, EmailTemplate, EmailStatus
 
 __all__ = [
     "User",
@@ -20,4 +21,7 @@ __all__ = [
     "FormLink",
     "FormSubmission",
     "Student",
+    "Email",
+    "EmailTemplate",
+    "EmailStatus",
 ]

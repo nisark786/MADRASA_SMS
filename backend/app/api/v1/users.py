@@ -10,6 +10,7 @@ from app.core.security import hash_password
 from app.core import redis_client as rc
 from app.core.audit import log_audit_task
 from app.core.password_policy import PasswordPolicy, PasswordChangeRequest
+from app.core.email_service import EmailService
 from app.models.user import User
 from app.models.role import UserRole
 from app.dependencies.auth import require_permission, get_current_user
@@ -23,6 +24,29 @@ _USER_COLS = (
     User.first_name, User.last_name,
     User.is_active, User.last_login, User.created_at,
 )
+
+
+async def send_welcome_email(user: User, db: AsyncSession):
+    """Send welcome email to newly created user."""
+    try:
+        email_service = EmailService()
+        await email_service.send_email(
+            recipient_email=user.email,
+            recipient_name=f"{user.first_name} {user.last_name}".strip() or user.username,
+            template_name="welcome",
+            context={
+                "app_name": "Students Data Store",
+                "first_name": user.first_name or user.username,
+                "username": user.username,
+            },
+            db=db,
+        )
+    except Exception as e:
+        # Log but don't fail user creation if email fails
+        from app.core.structured_logging import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Failed to send welcome email to {user.email}: {str(e)}")
+
 
 
 class CreateUserRequest(BaseModel):
@@ -102,6 +126,7 @@ async def create_user(
 
     background_tasks.add_task(rc.invalidate_keys, _USERS_LIST_KEY)
     background_tasks.add_task(log_audit_task, current_user.id, "CREATE_USER", "users", user.id)
+    background_tasks.add_task(send_welcome_email, user, db)
     return {"id": user.id, "username": user.username, "email": user.email}
 
 

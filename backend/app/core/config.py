@@ -28,6 +28,18 @@ class Settings(BaseSettings):
     # Rate Limiting (requests per minute)
     LOGIN_RATE_LIMIT: int = 5
     API_RATE_LIMIT: int = 60
+    
+    # Email / SMTP Configuration
+    SMTP_SERVER: str = "smtp.gmail.com"
+    SMTP_PORT: int = 465
+    SMTP_USERNAME: str = "madrasasms@gmail.com"
+    SMTP_PASSWORD: str  # Must be set via .env (Gmail App Password)
+    SMTP_FROM_EMAIL: str = "madrasasms@gmail.com"
+    SMTP_FROM_NAME: str = "Students Data Store"
+    
+    # Email Settings
+    EMAIL_ENABLED: bool = True
+    EMAIL_VERIFICATION_REQUIRED: bool = False  # Set to True later for Feature #9
 
     class Config:
         env_file = ".env"
