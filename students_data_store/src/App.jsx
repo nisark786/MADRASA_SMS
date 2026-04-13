@@ -8,6 +8,8 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import Login from './pages/Login';
 import NotAuthorized from './pages/NotAuthorized';
 import ShareStudentForm from './pages/ShareStudentForm';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Lazy-load all admin pages — they are only loaded when the user navigates there
 const Dashboard   = lazy(() => import('./pages/Dashboard'));
@@ -38,6 +40,8 @@ export default function App() {
             {/* Public routes — always bundled, no loading delay */}
             <Route path="/login"         element={<Login />} />
             <Route path="/not-authorized" element={<NotAuthorized />} />
+            <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
             <Route
               path="/form/:token"
               element={

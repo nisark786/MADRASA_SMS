@@ -18,7 +18,7 @@ from app.core.error_handler import (
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.structured_logging import StructuredLoggingMiddleware
 
-from app.api.v1 import auth, users, roles, permissions, widgets, students, forms, emails
+from app.api.v1 import auth, users, roles, permissions, widgets, students, forms, emails, password_reset
 
 # Setup structured logging
 setup_logging()
@@ -116,14 +116,15 @@ app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router,        prefix="/api/v1")
-app.include_router(users.router,       prefix="/api/v1")
-app.include_router(roles.router,       prefix="/api/v1")
-app.include_router(permissions.router, prefix="/api/v1")
-app.include_router(students.router,    prefix="/api/v1")
-app.include_router(widgets.router,     prefix="/api/v1")
-app.include_router(forms.router,       prefix="/api/v1")
-app.include_router(emails.router,      prefix="/api/v1")
+app.include_router(auth.router,            prefix="/api/v1")
+app.include_router(password_reset.router,  prefix="/api/v1")
+app.include_router(users.router,           prefix="/api/v1")
+app.include_router(roles.router,           prefix="/api/v1")
+app.include_router(permissions.router,     prefix="/api/v1")
+app.include_router(students.router,        prefix="/api/v1")
+app.include_router(widgets.router,         prefix="/api/v1")
+app.include_router(forms.router,           prefix="/api/v1")
+app.include_router(emails.router,          prefix="/api/v1")
 
 
 @app.get("/")

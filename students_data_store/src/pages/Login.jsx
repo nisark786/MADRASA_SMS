@@ -96,6 +96,16 @@ export default function Login() {
               </>
             )}
           </button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => navigate('/auth/forgot-password')}
+              className="text-sm text-indigo-600 font-semibold hover:text-indigo-700 transition-colors"
+            >
+              Forgot password?
+            </button>
+          </div>
         </form>
 
       </div>
