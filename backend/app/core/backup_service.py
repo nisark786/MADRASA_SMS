@@ -31,6 +31,7 @@ class DatabaseBackupService:
         backup_type: str = "full",
         compress: bool = True,
         is_automated: bool = False,
+        upload_to_drive: bool = False,
     ) -> tuple[bool, str, DatabaseBackup]:
         """
         Create a new database backup using pg_dump.
@@ -139,6 +140,34 @@ class DatabaseBackupService:
                 db.commit()
                 
                 logger.info(f"Backup completed: {backup_name} ({file_size} bytes)")
+                
+                # Upload to Google Drive if requested
+                if upload_to_drive:
+                    try:
+                        from app.core.google_drive_service import GoogleDriveService
+                        drive_service = GoogleDriveService()
+                        
+                        if drive_service.is_enabled:
+                            logger.info(f"Uploading backup to Google Drive: {backup_name}")
+                            success, message, drive_file_id = drive_service.upload_backup(
+                                file_path=str(backup_file),
+                                file_name=backup_file.name,
+                                description=description or f"Automated backup from Students Data Store"
+                            )
+                            
+                            if success:
+                                backup.google_drive_file_id = drive_file_id
+                                backup.uploaded_to_drive = True
+                                backup.uploaded_to_drive_at = datetime.now(timezone.utc)
+                                db.commit()
+                                logger.info(f"Backup uploaded to Google Drive: {drive_file_id}")
+                            else:
+                                logger.warning(f"Failed to upload to Google Drive: {message}")
+                    
+                    except Exception as e:
+                        logger.error(f"Error uploading to Google Drive: {e}")
+                        # Don't fail the backup if Google Drive upload fails
+                
                 return True, f"Backup created successfully: {backup_name}", backup
                 
             except subprocess.TimeoutExpired:

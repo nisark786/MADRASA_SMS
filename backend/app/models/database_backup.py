@@ -64,6 +64,12 @@ class DatabaseBackup(Base):
     # Error handling
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
     
+    # Google Drive Integration
+    google_drive_file_id: Mapped[str] = mapped_column(String(255), nullable=True)  # Google Drive file ID
+    google_drive_link: Mapped[str] = mapped_column(String(500), nullable=True)  # Google Drive web link
+    uploaded_to_drive: Mapped[bool] = mapped_column(Boolean, default=False)  # True if uploaded to Google Drive
+    uploaded_to_drive_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)  # When uploaded to Drive
+    
     # Relationships
     created_by = relationship("User", foreign_keys=[created_by_id])
     restore_jobs: Mapped[list["BackupRestore"]] = relationship(

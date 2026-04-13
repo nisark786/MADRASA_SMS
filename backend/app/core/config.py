@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # Email Settings
     EMAIL_ENABLED: bool = True
     EMAIL_VERIFICATION_REQUIRED: bool = False  # Set to True later for Feature #9
+    
+    # Google Drive Configuration
+    GOOGLE_DRIVE_ENABLED: bool = False
+    GOOGLE_CREDENTIALS_PATH: str = "google-credentials.json"
+    GOOGLE_DRIVE_FOLDER_ID: str = ""
+    GOOGLE_DRIVE_BACKUP_FOLDER_NAME: str = "Students Data Store Backups"
 
     class Config:
         env_file = ".env"

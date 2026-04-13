@@ -1,4 +1,6 @@
 """Database backup and recovery API endpoints."""
+import os
+import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -10,6 +12,8 @@ from app.core.backup_service import DatabaseBackupService
 from app.models.user import User
 from app.models.database_backup import DatabaseBackup, BackupRestore, BackupSchedule
 from app.models.audit_log import AuditLog
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/backups", tags=["backups"])
 backup_service = DatabaseBackupService()
@@ -24,6 +28,7 @@ def create_backup(
     description: str = Query(None, max_length=500),
     backup_type: str = Query("full"),
     compress: bool = Query(True),
+    upload_to_drive: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> dict:
@@ -33,6 +38,7 @@ def create_backup(
     - **Requires admin role**
     - Creates a backup using pg_dump
     - Optionally compresses with gzip
+    - Optionally uploads to Google Drive
     - Returns backup details
     """
     success, message, backup = backup_service.create_backup(
@@ -42,6 +48,7 @@ def create_backup(
         backup_type=backup_type,
         compress=compress,
         is_automated=False,
+        upload_to_drive=upload_to_drive,
     )
     
     if not success:
@@ -542,3 +549,231 @@ def delete_backup_schedule(
     db.commit()
     
     return {"success": True, "message": f"Schedule deleted: {schedule_name}"}
+
+
+# ============================================================================
+# Google Drive Integration Endpoints
+# ============================================================================
+
+@router.post("/{backup_id}/upload-to-drive", response_model=dict)
+def upload_backup_to_drive(
+    backup_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """
+    Upload an existing backup to Google Drive.
+    
+    - **Requires admin role**
+    - Uploads backup file to Google Drive storage
+    """
+    try:
+        from app.core.google_drive_service import GoogleDriveService
+        
+        # Get backup record
+        result = db.execute(select(DatabaseBackup).where(DatabaseBackup.id == backup_id))
+        backup = result.scalar_one_or_none()
+        
+        if not backup:
+            raise HTTPException(status_code=404, detail="Backup not found")
+        
+        if not backup.file_path or not os.path.exists(backup.file_path):
+            raise HTTPException(status_code=400, detail="Backup file not found on disk")
+        
+        # Initialize Google Drive service
+        drive_service = GoogleDriveService()
+        if not drive_service.is_enabled:
+            raise HTTPException(status_code=400, detail="Google Drive integration not enabled")
+        
+        # Upload to Google Drive
+        success, message, drive_file_id = drive_service.upload_backup(
+            file_path=backup.file_path,
+            file_name=backup.name + (".sql.gz" if backup.is_compressed else ".sql"),
+            description=backup.description or "Database backup from Students Data Store",
+        )
+        
+        if not success:
+            audit_log = AuditLog(
+                action="backup_upload_drive_failed",
+                resource_type="DatabaseBackup",
+                resource_id=backup_id,
+                user_id=current_user.id,
+                details={"error": message},
+            )
+            db.add(audit_log)
+            db.commit()
+            raise HTTPException(status_code=400, detail=message)
+        
+        # Update backup record
+        backup.google_drive_file_id = drive_file_id
+        backup.uploaded_to_drive = True
+        backup.uploaded_to_drive_at = datetime.now(timezone.utc)
+        db.commit()
+        
+        # Log successful upload
+        audit_log = AuditLog(
+            action="backup_uploaded_to_drive",
+            resource_type="DatabaseBackup",
+            resource_id=backup_id,
+            user_id=current_user.id,
+            details={"drive_file_id": drive_file_id},
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": message,
+            "backup": {
+                "id": backup.id,
+                "google_drive_file_id": drive_file_id,
+                "uploaded_to_drive": True,
+            },
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading backup to Google Drive: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.get("/google-drive/storage-info", response_model=dict)
+def get_google_drive_storage_info(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """
+    Get Google Drive storage information.
+    
+    - **Requires admin role**
+    - Returns storage quota and usage
+    """
+    try:
+        from app.core.google_drive_service import GoogleDriveService
+        
+        drive_service = GoogleDriveService()
+        storage_info = drive_service.get_storage_info()
+        
+        return storage_info
+    
+    except Exception as e:
+        logger.error(f"Error getting Google Drive storage info: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.get("/google-drive/list-files", response_model=dict)
+def list_google_drive_backups(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """
+    List all backups stored in Google Drive.
+    
+    - **Requires admin role**
+    - Returns list of backup files on Google Drive
+    """
+    try:
+        from app.core.google_drive_service import GoogleDriveService
+        
+        drive_service = GoogleDriveService()
+        if not drive_service.is_enabled:
+            return {
+                "enabled": False,
+                "message": "Google Drive integration not enabled",
+                "files": [],
+            }
+        
+        success, message, files = drive_service.list_backups()
+        
+        return {
+            "success": success,
+            "message": message,
+            "enabled": drive_service.is_enabled,
+            "files": [
+                {
+                    "id": f.get('id'),
+                    "name": f.get('name'),
+                    "size": f.get('size'),
+                    "size_mb": f.get('size', 0) / (1024 * 1024),
+                    "created_time": f.get('createdTime'),
+                    "modified_time": f.get('modifiedTime'),
+                    "web_link": f.get('webViewLink'),
+                }
+                for f in files
+            ],
+        }
+    
+    except Exception as e:
+        logger.error(f"Error listing Google Drive backups: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.delete("/{backup_id}/delete-from-drive", response_model=dict)
+def delete_backup_from_drive(
+    backup_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> dict:
+    """
+    Delete a backup from Google Drive.
+    
+    - **Requires admin role**
+    - Removes backup from Google Drive (keeps local copy)
+    """
+    try:
+        from app.core.google_drive_service import GoogleDriveService
+        
+        # Get backup record
+        result = db.execute(select(DatabaseBackup).where(DatabaseBackup.id == backup_id))
+        backup = result.scalar_one_or_none()
+        
+        if not backup:
+            raise HTTPException(status_code=404, detail="Backup not found")
+        
+        if not backup.google_drive_file_id:
+            raise HTTPException(status_code=400, detail="Backup not uploaded to Google Drive")
+        
+        # Initialize Google Drive service
+        drive_service = GoogleDriveService()
+        if not drive_service.is_enabled:
+            raise HTTPException(status_code=400, detail="Google Drive integration not enabled")
+        
+        # Delete from Google Drive
+        success, message = drive_service.delete_backup(backup.google_drive_file_id)
+        
+        if not success:
+            audit_log = AuditLog(
+                action="backup_delete_drive_failed",
+                resource_type="DatabaseBackup",
+                resource_id=backup_id,
+                user_id=current_user.id,
+                details={"error": message},
+            )
+            db.add(audit_log)
+            db.commit()
+            raise HTTPException(status_code=400, detail=message)
+        
+        # Update backup record
+        backup.google_drive_file_id = None
+        backup.uploaded_to_drive = False
+        db.commit()
+        
+        # Log deletion
+        audit_log = AuditLog(
+            action="backup_deleted_from_drive",
+            resource_type="DatabaseBackup",
+            resource_id=backup_id,
+            user_id=current_user.id,
+            details={},
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return {"success": True, "message": message}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting backup from Google Drive: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

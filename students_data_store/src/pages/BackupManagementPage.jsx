@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Download, Trash2, RotateCcw, Plus, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Download, Trash2, RotateCcw, Plus, AlertCircle, CheckCircle, Clock, XCircle, Cloud, CloudUpload } from 'lucide-react';
 import api from '../services/api';
 
 const BackupManagementPage = () => {
@@ -15,10 +15,14 @@ const BackupManagementPage = () => {
   const [statusFilter, setStatusFilter] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(null);
+  const [uploadToGoogleDrive, setUploadToGoogleDrive] = useState(false);
+  const [googleDriveStorageInfo, setGoogleDriveStorageInfo] = useState(null);
+  const [uploadingToGoogleDrive, setUploadingToGoogleDrive] = useState(null);
 
   useEffect(() => {
     fetchBackups();
     fetchSummary();
+    fetchGoogleDriveStorageInfo();
   }, [page, statusFilter]);
 
   const fetchBackups = async () => {
@@ -51,16 +55,28 @@ const BackupManagementPage = () => {
     }
   };
 
+  const fetchGoogleDriveStorageInfo = async () => {
+    try {
+      const response = await api.get('/backups/google-drive/storage-info');
+      setGoogleDriveStorageInfo(response.data);
+    } catch (err) {
+      console.error('Failed to fetch Google Drive storage info:', err);
+    }
+  };
+
   const handleCreateBackup = async () => {
     try {
       setCreating(true);
-      const response = await api.post('/backups', {
-        description: `Manual backup created at ${new Date().toLocaleString()}`,
-      });
+      const params = new URLSearchParams();
+      params.append('description', `Manual backup created at ${new Date().toLocaleString()}`);
+      params.append('upload_to_drive', uploadToGoogleDrive);
+      
+      const response = await api.post(`/backups?${params}`);
       if (response.data.success) {
         setPage(1);
         fetchBackups();
         fetchSummary();
+        setUploadToGoogleDrive(false);
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create backup');
@@ -92,6 +108,36 @@ const BackupManagementPage = () => {
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to restore backup');
+    }
+  };
+
+  const handleUploadToGoogleDrive = async (backupId) => {
+    try {
+      setUploadingToGoogleDrive(backupId);
+      const response = await api.post(`/backups/${backupId}/upload-to-drive`);
+      if (response.data.success) {
+        fetchBackups();
+        alert('Backup uploaded to Google Drive successfully!');
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to upload backup to Google Drive');
+    } finally {
+      setUploadingToGoogleDrive(null);
+    }
+  };
+
+  const handleDeleteFromGoogleDrive = async (backupId) => {
+    try {
+      setUploadingToGoogleDrive(backupId);
+      const response = await api.delete(`/backups/${backupId}/delete-from-drive`);
+      if (response.data.success) {
+        fetchBackups();
+        alert('Backup deleted from Google Drive');
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to delete backup from Google Drive');
+    } finally {
+      setUploadingToGoogleDrive(null);
     }
   };
 
@@ -160,6 +206,32 @@ const BackupManagementPage = () => {
           </div>
         )}
 
+        {/* Google Drive Storage Info */}
+        {googleDriveStorageInfo && googleDriveStorageInfo.enabled && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <div className="flex items-start gap-4">
+              <Cloud className="text-blue-600 flex-shrink-0 mt-1" size={24} />
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900 mb-2">Google Drive Storage</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-blue-700 font-medium">Used</p>
+                    <p className="text-blue-600">{googleDriveStorageInfo.usage_gb?.toFixed(2)} GB / {googleDriveStorageInfo.limit_gb?.toFixed(2)} GB</p>
+                  </div>
+                  <div>
+                    <p className="text-blue-700 font-medium">Available</p>
+                    <p className="text-blue-600">{googleDriveStorageInfo.available_gb?.toFixed(2)} GB</p>
+                  </div>
+                  <div>
+                    <p className="text-blue-700 font-medium">Status</p>
+                    <p className="text-green-600">✓ Connected</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-gap-3">
@@ -171,29 +243,43 @@ const BackupManagementPage = () => {
         )}
 
         {/* Actions */}
-        <div className="mb-6 flex gap-3">
-          <button
-            onClick={handleCreateBackup}
-            disabled={creating}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            <Plus size={20} />
-            {creating ? 'Creating...' : 'Create Backup'}
-          </button>
-          <select
-            value={statusFilter || ''}
-            onChange={(e) => {
-              setStatusFilter(e.target.value || null);
-              setPage(1);
-            }}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Statuses</option>
-            <option value="completed">Completed</option>
-            <option value="in_progress">In Progress</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </select>
+        <div className="mb-6 flex flex-col gap-3">
+          <div className="flex gap-3 flex-wrap items-center">
+            <button
+              onClick={handleCreateBackup}
+              disabled={creating}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              <Plus size={20} />
+              {creating ? 'Creating...' : 'Create Backup'}
+            </button>
+            <select
+              value={statusFilter || ''}
+              onChange={(e) => {
+                setStatusFilter(e.target.value || null);
+                setPage(1);
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="in_progress">In Progress</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          {googleDriveStorageInfo && googleDriveStorageInfo.enabled && (
+            <label className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
+              <input
+                type="checkbox"
+                checked={uploadToGoogleDrive}
+                onChange={(e) => setUploadToGoogleDrive(e.target.checked)}
+                className="w-4 h-4 text-blue-600"
+              />
+              <CloudUpload size={16} className="text-blue-600" />
+              <span className="text-sm font-medium text-blue-900">Upload to Google Drive</span>
+            </label>
+          )}
         </div>
 
         {/* Backups Table */}
@@ -213,7 +299,7 @@ const BackupManagementPage = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Type</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Duration</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Created</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Expires</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Drive</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -232,9 +318,18 @@ const BackupManagementPage = () => {
                         {backup.duration_seconds ? `${backup.duration_seconds}s` : 'N/A'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{formatDateTime(backup.created_at)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{formatDateTime(backup.expires_at)}</td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="flex gap-2">
+                        {backup.uploaded_to_drive ? (
+                          <div className="flex items-center gap-2">
+                            <Cloud size={16} className="text-blue-600" />
+                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Synced</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-500">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <div className="flex gap-1 flex-wrap">
                           {backup.status === 'completed' && (
                             <>
                               <button
@@ -242,16 +337,28 @@ const BackupManagementPage = () => {
                                 title="Restore from this backup"
                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                               >
-                                <RotateCcw size={18} />
+                                <RotateCcw size={16} />
                               </button>
-                              <a
-                                href={backup.file_path}
-                                download={backup.name}
-                                title="Download backup file"
-                                className="p-2 text-green-600 hover:bg-green-50 rounded transition-colors"
-                              >
-                                <Download size={18} />
-                              </a>
+                              {!backup.uploaded_to_drive && (
+                                <button
+                                  onClick={() => handleUploadToGoogleDrive(backup.id)}
+                                  disabled={uploadingToGoogleDrive === backup.id}
+                                  title="Upload to Google Drive"
+                                  className="p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
+                                >
+                                  <CloudUpload size={16} />
+                                </button>
+                              )}
+                              {backup.uploaded_to_drive && (
+                                <button
+                                  onClick={() => handleDeleteFromGoogleDrive(backup.id)}
+                                  disabled={uploadingToGoogleDrive === backup.id}
+                                  title="Remove from Google Drive"
+                                  className="p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
+                                >
+                                  <Cloud size={16} />
+                                </button>
+                              )}
                             </>
                           )}
                           <button
@@ -259,7 +366,7 @@ const BackupManagementPage = () => {
                             title="Delete backup"
                             className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                           >
-                            <Trash2 size={18} />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
