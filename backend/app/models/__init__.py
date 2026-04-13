@@ -8,6 +8,7 @@ from app.models.form import FormLink, FormSubmission
 from app.models.student import Student
 from app.models.email import Email, EmailTemplate, EmailStatus
 from app.models.password_reset import PasswordResetToken
+from app.models.email_verification import EmailVerificationToken
 
 __all__ = [
     "User",
@@ -26,4 +27,5 @@ __all__ = [
     "EmailTemplate",
     "EmailStatus",
     "PasswordResetToken",
+    "EmailVerificationToken",
 ]

@@ -10,6 +10,8 @@ import NotAuthorized from './pages/NotAuthorized';
 import ShareStudentForm from './pages/ShareStudentForm';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ResendVerificationPage from './pages/ResendVerificationPage';
 
 // Lazy-load all admin pages — they are only loaded when the user navigates there
 const Dashboard   = lazy(() => import('./pages/Dashboard'));
@@ -43,6 +45,8 @@ export default function App() {
             <Route path="/not-authorized" element={<NotAuthorized />} />
             <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/auth/resend-verification" element={<ResendVerificationPage />} />
             <Route
               path="/form/:token"
               element={
