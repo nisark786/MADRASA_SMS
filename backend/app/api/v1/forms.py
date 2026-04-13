@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, update
-from pydantic import BaseModel
+from sqlalchemy import select, delete, update, or_
+from pydantic import BaseModel, Field, EmailStr, validator
 from typing import Optional, List
 import uuid
+import re
 
 from app.core.database import get_db
 from app.core import redis_client as rc
@@ -31,6 +32,59 @@ class ToggleFormStatusRequest(BaseModel):
 
 class ApproveSubmissionRequest(BaseModel):
     force_update: bool = False
+
+
+# ── Form Submission Validation ────────────────────────────────────────────────
+class FormSubmissionData(BaseModel):
+    """Validated form submission schema with constraints."""
+    
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    email: Optional[EmailStr] = None
+    class_name: Optional[str] = Field(None, max_length=50)
+    roll_no: Optional[str] = Field(None, max_length=50)
+    admission_no: Optional[str] = Field(None, max_length=50)
+    mobile_numbers: Optional[List[str]] = Field(None, max_items=5)
+    address: Optional[str] = Field(None, max_length=500)
+    city: Optional[str] = Field(None, max_length=100)
+    state: Optional[str] = Field(None, max_length=100)
+    zip_code: Optional[str] = Field(None, max_length=20)
+    date_of_birth: Optional[str] = None
+    enrollment_date: Optional[str] = None
+    
+    @validator("date_of_birth", "enrollment_date", pre=True)
+    def validate_dates(cls, v):
+        """Validate date format (YYYY-MM-DD)."""
+        if v is None:
+            return v
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', str(v)):
+            raise ValueError("Date must be in YYYY-MM-DD format")
+        return v
+    
+    @validator("mobile_numbers", pre=True)
+    def validate_mobile_numbers(cls, v):
+        """Validate mobile numbers."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            raise ValueError("mobile_numbers must be a list")
+        for num in v:
+            if not isinstance(num, str) or len(num) < 7 or len(num) > 20:
+                raise ValueError("Invalid phone number format")
+        return v
+    
+    @validator("first_name", "last_name", pre=True)
+    def sanitize_names(cls, v):
+        """Sanitize names to prevent XSS."""
+        if v is None:
+            return v
+        # Only allow letters, numbers, spaces, hyphens, apostrophes
+        if not re.match(r"^[a-zA-Z0-9\s\-']+$", str(v)):
+            raise ValueError("Name contains invalid characters")
+        return str(v).strip()
+    
+    class Config:
+        extra = "forbid"  # Reject unknown fields
 
 # ── ADMIN: FORM LINKS ─────────────────────────────────────────────────────────
 
@@ -158,9 +212,12 @@ async def approve_submission(
 ):
     """
     Approve a submission and create/update a Student.
-    Handles conflict resolution using "force_update".
+    Uses SELECT FOR UPDATE to prevent race conditions.
     """
-    result = await db.execute(select(FormSubmission).where(FormSubmission.id == sub_id))
+    # Lock the submission to prevent concurrent approvals
+    result = await db.execute(
+        select(FormSubmission).where(FormSubmission.id == sub_id).with_for_update()
+    )
     sub = result.scalar_one_or_none()
     
     if not sub:
@@ -172,16 +229,17 @@ async def approve_submission(
     email = s_data.get("email")
     admission_no = s_data.get("admission_no")
     
-    # Conflict Detection!
+    # Conflict Detection with locking!
     conflict_student = None
     if email or admission_no:
         conditions = []
         if email: conditions.append(Student.email == email)
         if admission_no: conditions.append(Student.admission_no == admission_no)
         
-        # Use OR query to find any matching overlap
-        from sqlalchemy import or_
-        existing_res = await db.execute(select(Student).where(or_(*conditions)).limit(1))
+        # Lock any matching students to prevent concurrent modifications
+        existing_res = await db.execute(
+            select(Student).where(or_(*conditions)).limit(1).with_for_update()
+        )
         conflict_student = existing_res.scalar_one_or_none()
         
     if conflict_student and not body.force_update:
@@ -206,14 +264,14 @@ async def approve_submission(
             
     # Write to Student
     if conflict_student and body.force_update:
-        # Update existing
+        # Update existing (already locked above)
         for k, v in s_data.items():
             if hasattr(conflict_student, k) and v is not None:
                 setattr(conflict_student, k, v)
         if enrollment:
             conflict_student.enrollment_date = enrollment
     else:
-        # Create new
+        # Create new student
         new_student = Student(
             first_name=s_data.get("first_name", ""),
             last_name=s_data.get("last_name", ""),
@@ -229,7 +287,7 @@ async def approve_submission(
             date_of_birth=s_data.get("date_of_birth"),
             enrollment_date=enrollment,
             submitted_via_form=True,
-            form_submission_code=None # Deprecated in favor of the new system
+            form_submission_code=None
         )
         db.add(new_student)
 
@@ -277,19 +335,60 @@ async def public_get_form(token: str, db: AsyncSession = Depends(get_db)):
     }
 
 @router.post("/public/{token}/submit")
-async def public_submit_form(token: str, data: dict, db: AsyncSession = Depends(get_db)):
-    """Accept public data submission and hold it in pending state."""
-    result = await db.execute(select(FormLink).where(FormLink.token == token, FormLink.is_active == True))
+async def public_submit_form(
+    token: str,
+    data: FormSubmissionData,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accept public data submission with full validation.
+    - Schema validation (types, lengths, formats)
+    - Field validation against form configuration
+    - XSS/injection protection
+    """
+    # Get the form link
+    result = await db.execute(
+        select(FormLink).where(FormLink.token == token, FormLink.is_active == True)
+    )
     form = result.scalar_one_or_none()
     if not form:
-        raise HTTPException(status_code=404, detail="Form link is invalid or deactivated.")
-        
+        raise HTTPException(
+            status_code=404,
+            detail="Form link is invalid or has been deactivated."
+        )
+    
+    # Validate submitted fields against form's allowed_fields
+    allowed_field_names = {field["name"] for field in form.allowed_fields}
+    submitted_data = data.dict(exclude_unset=True)
+    submitted_field_names = set(submitted_data.keys())
+    
+    # Check for unexpected fields
+    unexpected_fields = submitted_field_names - allowed_field_names
+    if unexpected_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unexpected fields: {', '.join(unexpected_fields)}"
+        )
+    
+    # Check for required fields
+    required_fields = {f["name"] for f in form.allowed_fields if f.get("required", False)}
+    missing_required = required_fields - submitted_field_names
+    if missing_required:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required fields: {', '.join(missing_required)}"
+        )
+    
+    # Create submission with validated data
     sub = FormSubmission(
         form_link_id=form.id,
-        submitted_data=data,
+        submitted_data=submitted_data,
         status="pending"
     )
     db.add(sub)
     await db.commit()
     
-    return {"message": "Thank you! Your information has been submitted successfully and is pending review."}
+    return {
+        "message": "Thank you! Your information has been submitted successfully and is pending review.",
+        "submission_id": sub.id
+    }

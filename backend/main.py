@@ -2,13 +2,27 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 
 from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.redis_client import init_redis, close_redis
 from app.core.seed import seed_database
+from app.core.structured_logging import setup_logging, get_logger
+from app.core.error_handler import (
+    APIException,
+    api_exception_handler,
+    validation_error_handler,
+    general_exception_handler,
+)
+from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.structured_logging import StructuredLoggingMiddleware
 
 from app.api.v1 import auth, users, roles, permissions, widgets, students, forms
+
+# Setup structured logging
+setup_logging()
+logger = get_logger(__name__)
 
 
 def setup_tracing():
@@ -52,7 +66,6 @@ async def lifespan(app: FastAPI):
             # We no longer auto-create tables via SQLAlchemy. 
             # Alembic will handle this going forward via CI/CD.
             async with engine.begin() as conn:
-                # await conn.run_sync(Base.metadata.create_all)
                 pass
             print("✅ Database connection ready (Auto-create disabled)")
             break
@@ -85,9 +98,22 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[url.strip() for url in settings.FRONTEND_URL.split(",") if url.strip()],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+    expose_headers=["Content-Range", "X-Content-Range", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "X-Request-ID"],
+    max_age=600,  # 10 minutes cache CORS preflight
 )
+
+# ── Structured Logging ────────────────────────────────────────────────────────
+app.add_middleware(StructuredLoggingMiddleware)
+
+# ── Security Headers ─────────────────────────────────────────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ── Exception Handlers ────────────────────────────────────────────────────────
+app.add_exception_handler(APIException, api_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(Exception, general_exception_handler)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router,        prefix="/api/v1")

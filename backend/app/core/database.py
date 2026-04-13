@@ -7,21 +7,30 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
-    pool_size=10,              # Increased for concurrency
-    max_overflow=20,           # Allow more temporary overflow
-    pool_timeout=30,           # Wait up to 30s for a connection
-    pool_pre_ping=False,       # Disabled pre-ping for speed (rely on pool_recycle)
-    pool_recycle=1800,         # Recycle every 30 min instead of 5
+    # Connection pool configuration
+    pool_size=settings.DB_POOL_SIZE,                    # Connections to keep in pool
+    max_overflow=settings.DB_MAX_OVERFLOW,              # Additional peak connections
+    pool_timeout=settings.DB_POOL_TIMEOUT,              # Fail fast on timeout
+    pool_pre_ping=True,                                  # Health check before use
+    pool_recycle=settings.DB_POOL_RECYCLE,              # Recycle stale connections
+    pool_reset_on_return="rollback",                    # Clean state after use
+    # Query optimization
     connect_args={
         "ssl": "require",
-        "command_timeout": 60, # Statements time out after 60s
+        "command_timeout": 30,
+        "statement_cache_size": 0,                      # Disable statement caching (prepared statements)
+        "prepared_statement_cache_size": 0,
+        "server_settings": {
+            "application_name": "students_backend",
+            "jit": "off",                               # Disable JIT for consistency
+        }
     },
 )
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
-    expire_on_commit=False,
+    expire_on_commit=True,  # Refresh state after commits
 )
 
 

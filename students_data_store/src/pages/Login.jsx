@@ -3,11 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { GraduationCap, Mail, Lock, LogIn } from 'lucide-react';
 
-const TEST_ACCOUNTS = [
-  { email: 'admin@example.com', password: 'admin123' },
-  { email: 'sara@example.com', password: 'sara1234' },
-  { email: 'john@example.com', password: 'john1234' },
-];
 
 export default function Login() {
   const { login } = useAuthStore();
@@ -30,10 +25,6 @@ export default function Login() {
     }
   };
 
-  const fillTestCredentials = (email, password) => {
-    setForm({ email, password });
-    setError('');
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50/50 font-sans p-4 antialiased">
@@ -107,21 +98,6 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-gray-100 relative">
-          <p className="text-gray-400 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-center mb-4">Click to Fill Credentials</p>
-          <div className="grid grid-cols-1 gap-2">
-            {TEST_ACCOUNTS.map((account) => (
-              <button
-                key={account.email}
-                type="button"
-                className="flex items-center justify-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-[0.8rem] text-gray-500 font-bold hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-600 transition-all"
-                onClick={() => fillTestCredentials(account.email, account.password)}
-              >
-                <code className="font-mono font-medium">{account.email}</code>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

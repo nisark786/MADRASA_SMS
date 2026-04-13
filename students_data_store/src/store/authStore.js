@@ -16,8 +16,9 @@ export const useAuthStore = create((set, get) => ({
   
   login: async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('access_token', data.access_token);
-    localStorage.setItem('refresh_token', data.refresh_token);
+    
+    // Tokens are now stored in httpOnly cookies automatically
+    // Only store user data and permissions in localStorage
     localStorage.setItem('auth_user', JSON.stringify(data.user));
     localStorage.setItem('permissions', JSON.stringify(data.permissions));
     
@@ -27,7 +28,10 @@ export const useAuthStore = create((set, get) => ({
   
   logout: async () => {
     try { await api.post('/auth/logout'); } catch {}
-    localStorage.clear();
+    // Clear only user data from localStorage
+    // Cookies are cleared by server response
+    localStorage.removeItem('auth_user');
+    localStorage.removeItem('permissions');
     set({ user: null, permissions: [] });
   },
   

@@ -4,7 +4,7 @@ Bootstrap seed — runs once on startup.
 Only creates the bare minimum to get started:
   ✅ All system permissions (7 granular permissions)
   ✅ One system role: "admin" (cannot be deleted)
-  ✅ One admin user: admin@example.com / admin123
+  ✅ One admin user from environment variables
   ✅ All dashboard widgets linked to permissions
 
 Everything else (new roles, new users, role assignments)
@@ -12,6 +12,7 @@ is created DYNAMICALLY by the admin through the API.
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import os
 
 from app.models.user import User
 from app.models.role import Role, UserRole
@@ -128,15 +129,24 @@ async def seed_database(db: AsyncSession):
             db.add(RolePermission(role_id=admin_role.id, permission_id=perm.id))
         print("  ✅ All permissions assigned to admin role")
 
-    # ── 3. Seed ONE system user: admin@example.com ────────────────────────────
+    # ── 3. Seed ONE system user (credentials from environment variables) ────────
     # NO other users seeded — admin creates all users dynamically via API
-    result = await db.execute(select(User).where(User.email == "admin@example.com"))
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    
+    if not admin_password:
+        raise ValueError(
+            "ADMIN_PASSWORD environment variable is required for initial seed. "
+            "Set it before starting the application."
+        )
+    
+    result = await db.execute(select(User).where(User.email == admin_email))
     admin_user = result.scalar_one_or_none()
     if not admin_user:
         admin_user = User(
             username="admin",
-            email="admin@example.com",
-            password_hash=hash_password("admin123"),
+            email=admin_email,
+            password_hash=hash_password(admin_password),
             first_name="System",
             last_name="Admin",
             is_active=True,
@@ -144,7 +154,7 @@ async def seed_database(db: AsyncSession):
         db.add(admin_user)
         await db.flush()
         db.add(UserRole(user_id=admin_user.id, role_id=admin_role.id))
-        print("  ✅ Admin user created: admin@example.com / admin123")
+        print(f"  ✅ Admin user created: {admin_email}")
 
     # ── 4. Seed widgets (linked to permissions) ────────────────────────────────
     for wdata in SYSTEM_WIDGETS:

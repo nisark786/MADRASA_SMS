@@ -31,13 +31,17 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/students_db}
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      SECRET_KEY: ${SECRET_KEY:-your-secure-production-secret-key-here}
+      SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 15
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-5}
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-60}
     depends_on:
       - redis
       - jaeger

@@ -4,11 +4,11 @@ from sqlalchemy import select, delete, insert
 from pydantic import BaseModel
 from typing import Optional
 from collections import defaultdict
-import asyncio
 
 from app.core.database import get_db
 from app.core import redis_client as rc
 from app.core.audit import log_audit_task
+from app.core.cache_helpers import invalidate_multiple_user_caches
 from app.models.user import User
 from app.models.role import Role, UserRole
 from app.models.permission import Permission, RolePermission
@@ -122,17 +122,18 @@ async def update_role(
                 [{"role_id": role_id, "permission_id": pid, "granted_by": current_user.id} for pid in body.permission_ids],
             )
 
-        # Invalidate ALL users with this role (permissions changed)
+        # Query users with this role for background cache invalidation
         ur_result = await db.execute(
             select(UserRole.user_id).where(UserRole.role_id == role_id)
         )
         user_ids = [row[0] for row in ur_result.all()]
-        await asyncio.gather(
-            *[rc.invalidate_user_permissions(uid) for uid in user_ids],
-            *[rc.invalidate_user_object(uid) for uid in user_ids],
-        )
-        # Also invalidate per-user widget caches (permission-gated)
-        background_tasks.add_task(rc.invalidate_pattern, "cache:widgets:*")
+        
+        # Move expensive cache invalidation to background (non-blocking)
+        if user_ids:
+            background_tasks.add_task(invalidate_multiple_user_caches, user_ids)
+        
+        # Use shorter TTL instead of aggressive KEYS pattern scan
+        background_tasks.add_task(rc.invalidate_keys, _ROLES_LIST_KEY)
 
     await db.commit()
     background_tasks.add_task(rc.invalidate_keys, _ROLES_LIST_KEY)

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, insert, update
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 import asyncio
 
@@ -9,9 +9,10 @@ from app.core.database import get_db
 from app.core.security import hash_password
 from app.core import redis_client as rc
 from app.core.audit import log_audit_task
+from app.core.password_policy import PasswordPolicy, PasswordChangeRequest
 from app.models.user import User
 from app.models.role import UserRole
-from app.dependencies.auth import require_permission
+from app.dependencies.auth import require_permission, get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -31,6 +32,15 @@ class CreateUserRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     role_ids: list[str] = []
+    
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v):
+        """Validate password against policy."""
+        is_valid, error_msg = PasswordPolicy.validate(v)
+        if not is_valid:
+            raise ValueError(error_msg)
+        return v
 
 
 class UpdateUserRequest(BaseModel):
@@ -159,3 +169,51 @@ async def delete_user(
     background_tasks.add_task(rc.invalidate_keys, _USERS_LIST_KEY)
     background_tasks.add_task(log_audit_task, current_user.id, "DELETE_USER", "users", user_id)
     return {"message": "User deleted"}
+
+
+@router.post("/change-password")
+async def change_password(
+    body: PasswordChangeRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Change password for the current user.
+    
+    Requires:
+    - Current password verification
+    - New password matching confirmation password
+    - New password passing security policy (12+ chars, uppercase, lowercase, digit, special char)
+    """
+    from app.core.security import verify_password
+    
+    # Fetch user from DB to get password hash
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    
+    # Verify current password
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+    
+    # Check that new password is different from current
+    if verify_password(body.new_password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different from current password")
+    
+    # Update password (validation already done by Pydantic model)
+    new_hash = hash_password(body.new_password)
+    await db.execute(
+        update(User).where(User.id == current_user.id).values(password_hash=new_hash)
+    )
+    await db.commit()
+    
+    # Invalidate user cache to force re-login
+    await rc.invalidate_user_object(current_user.id)
+    
+    # Log audit event
+    background_tasks.add_task(log_audit_task, current_user.id, "CHANGE_PASSWORD", "users", current_user.id)
+    
+    return {"message": "Password changed successfully"}

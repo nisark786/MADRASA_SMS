@@ -10,3 +10,22 @@ backend/.pytest_cache/
 
 # Docker
 docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables (never commit!)
+.env*
+!.env.example
+!docker-compose.env.example
+
+# Terraform files (too large and sensitive)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+

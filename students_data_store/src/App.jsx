@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './router/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 
 // Eagerly load only public/authentication routes
 import Login from './pages/Login';
@@ -28,61 +30,80 @@ function PageLoader() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          {/* Public routes — always bundled, no loading delay */}
-          <Route path="/login"         element={<Login />} />
-          <Route path="/not-authorized" element={<NotAuthorized />} />
-          <Route path="/form/:token"   element={<ShareStudentForm />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* Public routes — always bundled, no loading delay */}
+            <Route path="/login"         element={<Login />} />
+            <Route path="/not-authorized" element={<NotAuthorized />} />
+            <Route
+              path="/form/:token"
+              element={
+                <RouteErrorBoundary routeName="Student Form">
+                  <ShareStudentForm />
+                </RouteErrorBoundary>
+              }
+            />
 
-          {/* Protected routes — lazy loaded */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute permission="admin:manage_users">
-                <UsersPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/roles"
-            element={
-              <ProtectedRoute permission="admin:manage_roles">
-                <RolesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/students"
-            element={
-              <ProtectedRoute permission="students:read">
-                <StudentsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/students/report"
-            element={
-              <ProtectedRoute permission="students:read">
-                <StudentReport />
-              </ProtectedRoute>
-            }
-          />
+            {/* Protected routes — lazy loaded with error boundaries */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <RouteErrorBoundary routeName="Dashboard">
+                    <Dashboard />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute permission="admin:manage_users">
+                  <RouteErrorBoundary routeName="Users Management">
+                    <UsersPage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/roles"
+              element={
+                <ProtectedRoute permission="admin:manage_roles">
+                  <RouteErrorBoundary routeName="Roles Management">
+                    <RolesPage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/students"
+              element={
+                <ProtectedRoute permission="students:read">
+                  <RouteErrorBoundary routeName="Students Management">
+                    <StudentsPage />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/students/report"
+              element={
+                <ProtectedRoute permission="students:read">
+                  <RouteErrorBoundary routeName="Student Report">
+                    <StudentReport />
+                  </RouteErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Default redirect */}
-          <Route path="/"  element={<Navigate to="/dashboard" replace />} />
-          <Route path="*"  element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+            {/* Default redirect */}
+            <Route path="/"  element={<Navigate to="/dashboard" replace />} />
+            <Route path="*"  element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
